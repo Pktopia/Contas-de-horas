@@ -1,0 +1,912 @@
+"use client"
+
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+
+import { useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Filter,
+  Plus,
+  Clock,
+  DollarSign,
+  Calendar,
+  Download,
+  LogOut,
+  User,
+  Trash2,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Lock,
+  Pencil,
+  Save,
+} from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
+// Tipos
+interface TimeEntry {
+  id: number
+  patronId: number
+  patronName: string
+  date: string
+  hours: string
+  hourlyRate: number
+  total: number
+  borderColor: string
+}
+
+interface Patron {
+  id: number
+  name: string
+  color: string
+  borderColor: string
+  total: number
+}
+
+// Dados mockados
+const patrons = [
+  { id: 1, name: "Patrão A", color: "bg-blue-200", borderColor: "border-l-blue-600", total: 1250.5 },
+  { id: 2, name: "Patrão B", color: "bg-green-200", borderColor: "border-l-green-600", total: 875.0 },
+  { id: 3, name: "Patrão C", color: "bg-orange-200", borderColor: "border-l-orange-600", total: 650.75 },
+]
+
+const timeEntries = [
+  {
+    id: 1,
+    patronId: 1,
+    patronName: "Patrão A",
+    date: "10/06/2025",
+    hours: "5h 30min",
+    hourlyRate: 50.0,
+    total: 275.0,
+    borderColor: "border-l-blue-600",
+  },
+  {
+    id: 2,
+    patronId: 2,
+    patronName: "Patrão B",
+    date: "09/06/2025",
+    hours: "8h 00min",
+    hourlyRate: 45.0,
+    total: 360.0,
+    borderColor: "border-l-green-600",
+  },
+  {
+    id: 3,
+    patronId: 1,
+    patronName: "Patrão A",
+    date: "08/06/2025",
+    hours: "6h 15min",
+    hourlyRate: 50.0,
+    total: 312.5,
+    borderColor: "border-l-blue-600",
+  },
+  {
+    id: 4,
+    patronId: 3,
+    patronName: "Patrão C",
+    date: "07/06/2025",
+    hours: "4h 30min",
+    hourlyRate: 40.0,
+    total: 180.0,
+    borderColor: "border-l-orange-600",
+  },
+  {
+    id: 5,
+    patronId: 2,
+    patronName: "Patrão B",
+    date: "06/06/2025",
+    hours: "7h 20min",
+    hourlyRate: 45.0,
+    total: 330.0,
+    borderColor: "border-l-green-600",
+  },
+]
+
+interface FreelancerHoursTrackerProps {
+  username: string
+  userPassword: string
+  onLogout: () => void
+}
+
+export default function FreelancerHoursTracker({ username, userPassword, onLogout }: FreelancerHoursTrackerProps) {
+  const [selectedFilter, setSelectedFilter] = useState("todos")
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+
+  const [patronsList, setPatronsList] = useState<Patron[]>(patrons)
+  const [timeEntriesList, setTimeEntriesList] = useState<TimeEntry[]>(timeEntries)
+  const [newPatronName, setNewPatronName] = useState("")
+  const [selectedPatron, setSelectedPatron] = useState("")
+  const [showNewPatronField, setShowNewPatronField] = useState(false)
+
+  // Estados para exclusão com senha
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
+  const [patronToDelete, setPatronToDelete] = useState<{ id: number; name: string } | null>(null)
+  const [deletePassword, setDeletePassword] = useState("")
+  const [showDeletePassword, setShowDeletePassword] = useState(false)
+  const [passwordError, setPasswordError] = useState("")
+
+  // Estados para detalhes do patrão
+  const [selectedPatronDetails, setSelectedPatronDetails] = useState<{
+    id: number
+    name: string
+    color: string
+  } | null>(null)
+  const [isPatronDetailsOpen, setIsPatronDetailsOpen] = useState(false)
+
+  // Estados para edição de lançamento
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    patronId: 0,
+    patronName: "",
+    date: "",
+    hours: "",
+    hourlyRate: 0,
+  })
+
+  const filteredEntries =
+    selectedFilter === "todos"
+      ? timeEntriesList
+      : timeEntriesList.filter((entry) => entry.patronName === selectedFilter)
+
+  // Função para calcular os totais dos patrões
+  const calculatePatronTotals = () => {
+    const updatedPatrons = [...patronsList]
+
+    updatedPatrons.forEach((patron) => {
+      const patronEntries = timeEntriesList.filter((entry) => entry.patronId === patron.id)
+      patron.total = patronEntries.reduce((sum, entry) => sum + entry.total, 0)
+    })
+
+    setPatronsList(updatedPatrons)
+  }
+
+  const handleExportExcel = () => {
+    // Criar dados para exportação
+    const exportData = filteredEntries.map((entry) => ({
+      Patrão: entry.patronName,
+      Data: entry.date,
+      Horas: entry.hours,
+      "Valor/Hora": `€${entry.hourlyRate.toFixed(2)}`,
+      Total: `€${entry.total.toFixed(2)}`,
+    }))
+
+    // Converter para CSV (simulando Excel)
+    const headers = Object.keys(exportData[0]).join(",")
+    const csvContent = exportData.map((row) => Object.values(row).join(",")).join("\n")
+    const csv = headers + "\n" + csvContent
+
+    // Download do arquivo
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.setAttribute("href", url)
+    link.setAttribute("download", "controle_horas.csv")
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const addNewPatron = () => {
+    if (newPatronName.trim()) {
+      const colors = [
+        { color: "bg-blue-200", borderColor: "border-l-blue-600" },
+        { color: "bg-green-200", borderColor: "border-l-green-600" },
+        { color: "bg-orange-200", borderColor: "border-l-orange-600" },
+        { color: "bg-purple-200", borderColor: "border-l-purple-600" },
+        { color: "bg-red-200", borderColor: "border-l-red-600" },
+        { color: "bg-yellow-200", borderColor: "border-l-yellow-600" },
+      ]
+
+      const colorIndex = patronsList.length % colors.length
+      const newPatron = {
+        id: patronsList.length + 1,
+        name: newPatronName.trim(),
+        ...colors[colorIndex],
+        total: 0,
+      }
+
+      setPatronsList([...patronsList, newPatron])
+      setSelectedPatron(newPatronName.trim())
+      setNewPatronName("")
+      setShowNewPatronField(false)
+    }
+  }
+
+  const handleDeletePatron = (patronId: number, patronName: string) => {
+    // Verificar se há lançamentos associados
+    const hasEntries = timeEntriesList.some((entry) => entry.patronName === patronName)
+
+    if (hasEntries) {
+      // Se há lançamentos, abrir modal de senha
+      setPatronToDelete({ id: patronId, name: patronName })
+      setIsPasswordDialogOpen(true)
+      setDeletePassword("")
+      setPasswordError("")
+    } else {
+      // Se não há lançamentos, excluir diretamente
+      deletePatronDirectly(patronId, patronName)
+    }
+  }
+
+  const deletePatronDirectly = (patronId: number, patronName: string) => {
+    // Remover patrão da lista
+    setPatronsList(patronsList.filter((p) => p.id !== patronId))
+
+    // Resetar filtro se o patrão excluído estava selecionado
+    if (selectedFilter === patronName) {
+      setSelectedFilter("todos")
+    }
+  }
+
+  const deletePatronWithPassword = () => {
+    if (!patronToDelete) return
+
+    // Validar senha
+    if (deletePassword !== userPassword) {
+      setPasswordError("Senha incorreta. Tente novamente.")
+      return
+    }
+
+    // Remover patrão da lista
+    setPatronsList(patronsList.filter((p) => p.id !== patronToDelete.id))
+
+    // Remover todos os lançamentos associados
+    setTimeEntriesList(timeEntriesList.filter((entry) => entry.patronName !== patronToDelete.name))
+
+    // Resetar filtro se o patrão excluído estava selecionado
+    if (selectedFilter === patronToDelete.name) {
+      setSelectedFilter("todos")
+    }
+
+    // Fechar modal e limpar estados
+    setIsPasswordDialogOpen(false)
+    setPatronToDelete(null)
+    setDeletePassword("")
+    setPasswordError("")
+  }
+
+  const cancelPasswordDialog = () => {
+    setIsPasswordDialogOpen(false)
+    setPatronToDelete(null)
+    setDeletePassword("")
+    setPasswordError("")
+  }
+
+  const openPatronDetails = (patron: { id: number; name: string; color: string }) => {
+    setSelectedPatronDetails(patron)
+    setIsPatronDetailsOpen(true)
+  }
+
+  // Funções para edição de lançamento
+  const openEditDialog = (entry: TimeEntry) => {
+    setEditingEntry(entry)
+
+    // Converter data do formato DD/MM/YYYY para YYYY-MM-DD para o input type="date"
+    const dateParts = entry.date.split("/")
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : ""
+
+    setEditFormData({
+      patronId: entry.patronId,
+      patronName: entry.patronName,
+      date: formattedDate,
+      hours: entry.hours,
+      hourlyRate: entry.hourlyRate,
+    })
+
+    setIsEditDialogOpen(true)
+  }
+
+  const handleEditFormChange = (field: string, value: string | number) => {
+    setEditFormData({
+      ...editFormData,
+      [field]: value,
+    })
+  }
+
+  const handlePatronChange = (patronName: string) => {
+    const patron = patronsList.find((p) => p.name === patronName)
+    if (patron) {
+      setEditFormData({
+        ...editFormData,
+        patronId: patron.id,
+        patronName: patron.name,
+      })
+    }
+  }
+
+  const saveEditedEntry = () => {
+    if (!editingEntry) return
+
+    // Converter data do formato YYYY-MM-DD para DD/MM/YYYY
+    const dateParts = editFormData.date.split("-")
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}` : editingEntry.date
+
+    // Calcular o novo total
+    const hoursMatch = editFormData.hours.match(/(\d+)h\s*(\d+)?min?/)
+    let totalHours = 0
+
+    if (hoursMatch) {
+      const hours = Number.parseInt(hoursMatch[1])
+      const minutes = hoursMatch[2] ? Number.parseInt(hoursMatch[2]) : 0
+      totalHours = hours + minutes / 60
+    }
+
+    const newTotal = totalHours * editFormData.hourlyRate
+
+    // Encontrar o patrão para obter a cor da borda
+    const patron = patronsList.find((p) => p.id === editFormData.patronId)
+    const borderColor = patron ? patron.borderColor : editingEntry.borderColor
+
+    // Atualizar o lançamento
+    const updatedEntry: TimeEntry = {
+      ...editingEntry,
+      patronId: editFormData.patronId,
+      patronName: editFormData.patronName,
+      date: formattedDate,
+      hours: editFormData.hours,
+      hourlyRate: editFormData.hourlyRate,
+      total: newTotal,
+      borderColor: borderColor,
+    }
+
+    // Atualizar a lista de lançamentos
+    const updatedEntries = timeEntriesList.map((entry) => (entry.id === editingEntry.id ? updatedEntry : entry))
+
+    setTimeEntriesList(updatedEntries)
+
+    // Recalcular totais dos patrões
+    setTimeout(() => {
+      calculatePatronTotals()
+    }, 0)
+
+    // Fechar o modal
+    setIsEditDialogOpen(false)
+    setEditingEntry(null)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-16">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="flex items-center justify-between p-4">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Meu Controle de Horas</h1>
+            <p className="text-sm text-gray-600">Olá, {username}!</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleExportExcel}>
+              <Download className="h-5 w-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Filter className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setSelectedFilter("todos")}>Todos os Patrões</DropdownMenuItem>
+                {patronsList.map((patron) => (
+                  <DropdownMenuItem key={patron.id} onClick={() => setSelectedFilter(patron.name)}>
+                    {patron.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <User className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled>
+                  <User className="h-4 w-4 mr-2" />
+                  {username}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onLogout} className="text-red-600">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard - Cards de Resumo */}
+      <div className="p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+          {patronsList.map((patron) => (
+            <Card key={patron.id} className={`${patron.color} border-0 relative group`}>
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3
+                      className="font-medium text-gray-900 cursor-pointer hover:text-blue-600 transition-colors"
+                      onClick={() => openPatronDetails(patron)}
+                    >
+                      {patron.name}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Total: € {patron.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-gray-600" />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-red-600" />
+                            Confirmar Exclusão
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja excluir o patrão "{patron.name}"?
+                            <br />
+                            <span className="text-sm text-red-600 mt-2 block">Esta ação não pode ser desfeita.</span>
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleDeletePatron(patron.id, patron.name)}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Excluir
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Lista de Lançamentos */}
+        <div className="space-y-3">
+          <h2 className="text-lg font-medium text-gray-900 mb-3">Lançamentos Recentes</h2>
+          {filteredEntries.map((entry) => (
+            <Card key={entry.id} className={`bg-white border-l-4 ${entry.borderColor} shadow-sm group`}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {entry.patronName}
+                      </Badge>
+                      <div className="flex items-center text-sm text-gray-500">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {entry.date}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center text-gray-600">
+                        <Clock className="h-4 w-4 mr-1" />
+                        {entry.hours}
+                      </div>
+                      <div className="text-gray-600">@ € {entry.hourlyRate.toFixed(2)}/h</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <div className="text-lg font-semibold text-gray-900">
+                        € {entry.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-600"
+                      onClick={() => openEditDialog(entry)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Modal de Confirmação com Senha */}
+      <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Lock className="h-5 w-5" />
+              Confirmação de Segurança
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-yellow-800">Atenção!</p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    O patrão "{patronToDelete?.name}" possui lançamentos associados. Ao excluí-lo, todos os lançamentos
+                    também serão removidos permanentemente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="deletePassword">Digite sua senha para confirmar:</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  id="deletePassword"
+                  type={showDeletePassword ? "text" : "password"}
+                  value={deletePassword}
+                  onChange={(e) => {
+                    setDeletePassword(e.target.value)
+                    setPasswordError("")
+                  }}
+                  placeholder="Digite sua senha"
+                  className="pl-10 pr-10"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  onClick={() => setShowDeletePassword(!showDeletePassword)}
+                >
+                  {showDeletePassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </Button>
+              </div>
+              {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="flex-1" onClick={cancelPasswordDialog}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={deletePatronWithPassword}
+                disabled={!deletePassword.trim()}
+              >
+                Confirmar Exclusão
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Detalhes do Patrão */}
+      <Dialog open={isPatronDetailsOpen} onOpenChange={setIsPatronDetailsOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Detalhes - {selectedPatronDetails?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedPatronDetails && (
+              <>
+                {/* Resumo do Patrão */}
+                <Card className={`${selectedPatronDetails.color} border-0`}>
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div>
+                        <p className="text-sm text-gray-600">Total Geral</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          €{" "}
+                          {timeEntriesList
+                            .filter((entry) => entry.patronName === selectedPatronDetails.name)
+                            .reduce((sum, entry) => sum + entry.total, 0)
+                            .toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Total de Dias</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {timeEntriesList.filter((entry) => entry.patronName === selectedPatronDetails.name).length}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Valor Médio/Hora</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          €{" "}
+                          {timeEntriesList
+                            .filter((entry) => entry.patronName === selectedPatronDetails.name)
+                            .reduce((sum, entry, _, arr) => sum + entry.hourlyRate / arr.length, 0)
+                            .toFixed(2)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Último Trabalho</p>
+                        <p className="text-lg font-semibold text-gray-900">
+                          {timeEntriesList
+                            .filter((entry) => entry.patronName === selectedPatronDetails.name)
+                            .sort(
+                              (a, b) =>
+                                new Date(b.date.split("/").reverse().join("-")).getTime() -
+                                new Date(a.date.split("/").reverse().join("-")).getTime(),
+                            )[0]?.date || "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Lista de Lançamentos */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-medium text-gray-900">Histórico de Trabalhos</h3>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {timeEntriesList
+                      .filter((entry) => entry.patronName === selectedPatronDetails.name)
+                      .sort(
+                        (a, b) =>
+                          new Date(b.date.split("/").reverse().join("-")).getTime() -
+                          new Date(a.date.split("/").reverse().join("-")).getTime(),
+                      )
+                      .map((entry) => (
+                        <Card key={entry.id} className={`bg-white border-l-4 ${entry.borderColor} shadow-sm group`}>
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-1">
+                                  <div className="flex items-center text-sm text-gray-500">
+                                    <Calendar className="h-4 w-4 mr-1" />
+                                    {entry.date}
+                                  </div>
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <Clock className="h-4 w-4 mr-1" />
+                                    {entry.hours}
+                                  </div>
+                                </div>
+                                <div className="text-sm text-gray-600">@ € {entry.hourlyRate.toFixed(2)}/hora</div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <div className="text-lg font-semibold text-gray-900">
+                                    € {entry.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-100 hover:text-blue-600"
+                                  onClick={() => {
+                                    setIsPatronDetailsOpen(false)
+                                    setTimeout(() => openEditDialog(entry), 100)
+                                  }}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Botão de Fechar */}
+                <div className="flex justify-end pt-4 border-t">
+                  <Button onClick={() => setIsPatronDetailsOpen(false)}>Fechar</Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Edição de Lançamento */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Editar Lançamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="editPatron">Patrão</Label>
+              <Select value={editFormData.patronName} onValueChange={handlePatronChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o patrão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patronsList.map((patron) => (
+                    <SelectItem key={patron.id} value={patron.name}>
+                      {patron.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editDate">Data</Label>
+              <Input
+                id="editDate"
+                type="date"
+                value={editFormData.date}
+                onChange={(e) => handleEditFormChange("date", e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editHours">Horas Trabalhadas</Label>
+              <Input
+                id="editHours"
+                placeholder="Ex: 8h 30min"
+                value={editFormData.hours}
+                onChange={(e) => handleEditFormChange("hours", e.target.value)}
+              />
+              <p className="text-xs text-gray-500">Formato: 8h 30min</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editRate">Valor por Hora (€)</Label>
+              <Input
+                id="editRate"
+                type="number"
+                step="0.01"
+                value={editFormData.hourlyRate}
+                onChange={(e) => handleEditFormChange("hourlyRate", Number.parseFloat(e.target.value))}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="flex-1" onClick={() => setIsEditDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-blue-700 hover:bg-blue-800 flex items-center justify-center gap-2"
+                onClick={saveEditedEntry}
+              >
+                <Save className="h-4 w-4" />
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Floating Action Button */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogTrigger asChild>
+          <Button
+            className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg bg-blue-700 hover:bg-blue-800"
+            size="icon"
+          >
+            <Plus className="h-6 w-6" />
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Novo Lançamento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="patron">Patrão</Label>
+              <Select value={selectedPatron} onValueChange={setSelectedPatron}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o patrão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {patronsList.map((patron) => (
+                    <SelectItem key={patron.id} value={patron.name}>
+                      {patron.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNewPatronField(!showNewPatronField)}
+                  className="text-xs"
+                >
+                  {showNewPatronField ? "Cancelar" : "+ Novo Patrão"}
+                </Button>
+              </div>
+
+              {showNewPatronField && (
+                <div className="space-y-2 p-3 bg-gray-50 rounded-md">
+                  <Label htmlFor="newPatron">Nome do Novo Patrão</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="newPatron"
+                      value={newPatronName}
+                      onChange={(e) => setNewPatronName(e.target.value)}
+                      placeholder="Digite o nome do patrão"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={addNewPatron}
+                      disabled={!newPatronName.trim()}
+                      size="sm"
+                      className="bg-blue-700 hover:bg-blue-800"
+                    >
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date">Data</Label>
+              <Input id="date" type="date" />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="hours">Horas Trabalhadas</Label>
+              <Input id="hours" placeholder="Ex: 8h 30min" />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rate">Valor por Hora (€)</Label>
+              <Input id="rate" type="number" step="0.01" placeholder="50.00" />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" className="flex-1" onClick={() => setIsAddDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 bg-blue-700 hover:bg-blue-800" onClick={() => setIsAddDialogOpen(false)}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
